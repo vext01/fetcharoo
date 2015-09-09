@@ -108,6 +108,10 @@ class MbsyncTray(object):
             md.close()
             logging.debug("count = %d" % new_count)
 
+            # XXX this logic is naive
+            # Is the new count the same, but with different messages?
+            # Suggest keeping a hash summary of the new messages in order
+            # to know really whether to show the notification.
             if new_count > watch.last_count:
                 msg = "%d new messages in maildir %s" % \
                     (new_count, watch.name)
