@@ -152,6 +152,18 @@ class MbsyncTray(object):
         logging.debug("user enabled menu")
         self.menu = Gtk.Menu()
 
+        # Clickable maildir entries
+        md_lens = [len(md.name) for md in self.watch_maildirs]
+        md_name_size = max(md_lens)
+        for md in self.watch_maildirs:
+            pad_md_name = md.name.ljust(md_name_size)
+            # XXX needs to be a monospace font
+            label = "%s: %05d" % (md.name, md.last_count)
+            md_item = Gtk.MenuItem(label)
+            #md_item.connect('activate', xxx)
+            md_item.show()
+            self.menu.append(md_item)
+
         # Enable/Disable
         option = "Disable" if self.enabled else "Enable"
         en_item = Gtk.MenuItem(option)
