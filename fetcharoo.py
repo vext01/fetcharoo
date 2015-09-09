@@ -26,6 +26,13 @@ logging.root.setLevel(logging.DEBUG)
 NOTIFY_SEND = distutils.spawn.find_executable("notify-send")
 
 
+class WatchedMaildir(object):
+    def __init__(self, name, path):
+        self.name = name
+        self.path = path
+        self.last_count = 0
+
+
 class MbsyncTray(object):
     """Main class, dealing with tray icon and menus"""
 
@@ -47,7 +54,11 @@ class MbsyncTray(object):
         self.fetch_cmd = ["/bin/sleep", "5"]
 
         # XXX make configurable
-        self.new_mail = {"test": 0}
+        self.watch_maildirs = [
+            WatchedMaildir("Test:test", "test"),
+            WatchedMaildir("Test:yay", "yay"),
+            WatchedMaildir("Test:xxx", "xxx"),
+        ]
 
         self.fetch_mail()  # fetch straight away
 
@@ -81,18 +92,28 @@ class MbsyncTray(object):
         self.set_timer()
 
     def check_for_new_mail(self):
-        for md_name, old_count in self.new_mail.iteritems():
-            logging.info("checking maildir '%s' for new mail" % md_name)
-            md = mailbox.Maildir(md_name, create=False)
-            new_count = len(md)
-            logging.debug("count for maildir %s: %d" % (md_name, new_count))
+        for watch in self.watch_maildirs:
+            logging.info("checking maildir '%s' (%s) for new mail"
+                         % (watch.name, watch.path))
 
-            if new_count > old_count:
+            try:
+                md = mailbox.Maildir(watch.path, create=False)
+            except mailbox.NoSuchMailboxError:
+                err_s = "No such mailbox: %s" % watch.path
+                logging.error(err_s)
+                self.notify(err_s)
+                continue
+
+            new_count = len(md)
+            md.close()
+            logging.debug("count = %d" % new_count)
+
+            if new_count > watch.last_count:
                 msg = "%d new messages in maildir %s" % \
-                    (new_count, md_name)
+                    (new_count, watch.name)
                 logging.info(msg)
                 self.notify(msg)
-                self.new_mail[md_name] = new_count
+                watch.last_count = new_count
 
     def fetch_mail(self):
         """Shell out to a command to fetch email into a maildir"""
