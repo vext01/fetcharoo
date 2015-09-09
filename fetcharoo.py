@@ -162,7 +162,7 @@ class MbsyncTray(object):
         for md in self.watch_maildirs:
             pad_md_name = md.name.ljust(md_name_size)
             # XXX needs to be a monospace font
-            label = "%s: %05d" % (md.name, md.last_count)
+            label = "%s: %05d" % (pad_md_name, md.last_count)
             md_item = Gtk.MenuItem(label)
             #md_item.connect('activate', xxx)
             md_item.show()
