@@ -30,7 +30,7 @@ class WatchedMaildir(object):
     def __init__(self, name, path):
         self.name = name
         self.path = path
-        self.last_count = 0
+        self.new_msg_ids = frozenset([])
 
 
 class MbsyncTray(object):
@@ -109,7 +109,7 @@ class MbsyncTray(object):
 
     def is_new_mail(self):
         for watch in self.watch_maildirs:
-            if watch.last_count > 0:
+            if watch.new_msg_ids:
                 return True
 
     def check_for_new_mail(self):
@@ -118,27 +118,32 @@ class MbsyncTray(object):
                          % (watch.name, watch.path))
 
             try:
-                md = mailbox.Maildir(watch.path, create=False)
+                md = mailbox.Maildir(watch.path, create=False,
+                                     factory=mailbox.MaildirMessage)
             except mailbox.NoSuchMailboxError:
                 err_s = "No such mailbox: %s" % watch.path
                 logging.error(err_s)
                 self.notify(err_s)
                 continue
 
-            new_count = len(md)
+            new_msgs = []
+            for k in md.iterkeys():
+                msg = md.get_message(k)
+                flags = msg.get_flags()
+                if 'S' not in flags:
+                    new_msgs.append(k)
             md.close()
-            logging.debug("count = %d" % new_count)
 
-            # XXX this logic is naive
-            # Is the new count the same, but with different messages?
-            # Suggest keeping a hash summary of the new messages in order
-            # to know really whether to show the notification.
-            if new_count > watch.last_count:
+            new_msgs = frozenset(new_msgs)
+            old_msgs = watch.new_msg_ids
+            actually_new = old_msgs.symmetric_difference(new_msgs)
+
+            if actually_new:
                 msg = "%d new messages in maildir %s" % \
-                    (new_count, watch.name)
+                    (len(actually_new), watch.name)
                 logging.info(msg)
                 self.notify(msg)
-                watch.last_count = new_count
+                watch.new_msg_ids = actually_new
 
     def change_state(self, which):
         self.fetch_state = which
@@ -190,7 +195,7 @@ class MbsyncTray(object):
         for md in self.watch_maildirs:
             pad_md_name = md.name.ljust(md_name_size)
             # XXX needs to be a monospace font
-            label = "%s: %05d" % (pad_md_name, md.last_count)
+            label = "%s: %05d" % (pad_md_name, len(md.new_msg_ids))
             md_item = Gtk.MenuItem(label)
             #md_item.connect('activate', xxx)
             md_item.show()
