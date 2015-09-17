@@ -48,14 +48,15 @@ class MbsyncTray(object):
 
         self.fetch_interval = fetch_interval
 
+        # We build a set of new message IDs and use this to decide
+        # if there are any new messages since last time.
         # XXX real command
-        self.fetch_cmd = ["/bin/sleep", "5"]
+        self.fetch_cmd = ["/bin/sleep", "2"]
 
         # XXX make configurable
         self.watch_maildirs = [
             WatchedMaildir("Test:test", "test"),
             WatchedMaildir("Test:yay", "yay"),
-            WatchedMaildir("Test:xxx", "xxx"),
         ]
         self.change_state(self.FETCH_STATE_WAIT)
 
