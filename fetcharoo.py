@@ -38,16 +38,14 @@ class MbsyncTray(object):
 
     FETCH_STATE_WAIT = 0
     FETCH_STATE_FETCHING = 1
+    FETCH_STATE_DISABLED = 2
 
     def __init__(self, fetch_interval=300):
         # Tray Icon itself
         self.tray = Gtk.StatusIcon()
-        self.tray.set_from_stock(Gtk.STOCK_JUSTIFY_RIGHT)
         self.tray.connect('popup-menu', self.show_menu)
         self.tray.set_visible(True)
 
-        self.enabled = True
-        self.fetch_state = self.FETCH_STATE_WAIT
         self.fetch_interval = fetch_interval
 
         # XXX real command
@@ -59,8 +57,24 @@ class MbsyncTray(object):
             WatchedMaildir("Test:yay", "yay"),
             WatchedMaildir("Test:xxx", "xxx"),
         ]
+        self.change_state(self.FETCH_STATE_WAIT)
 
         self.fetch_mail()  # fetch straight away
+
+    def set_icon(self):
+        if self.fetch_state == self.FETCH_STATE_WAIT:
+            if self.is_new_mail():
+                icon_name = "mail-unread"
+            else:
+                icon_name = "mail-read"
+        elif self.fetch_state == self.FETCH_STATE_FETCHING:
+            icon_name = "mail-send-receive"
+        elif self.fetch_state == self.FETCH_STATE_DISABLED:
+            icon_name = "stock_delete"
+        else:
+            assert False
+
+        self.tray.set_from_icon_name(icon_name)
 
     def set_timer(self):
         logging.debug("setting timer for %d seconds" % self.fetch_interval)
@@ -71,8 +85,9 @@ class MbsyncTray(object):
 
         logging.debug("timer callback running")
         if self.fetch_state == self.FETCH_STATE_WAIT:
-            if self.enabled:
-                self.fetch_mail()
+            self.fetch_mail()
+        elif self.fetch_state == self.FETCH_STATE_DISABLED:
+            pass
         else:
             assert False  # NOREACH
 
@@ -88,8 +103,13 @@ class MbsyncTray(object):
 
         self.check_for_new_mail()
 
-        self.fetch_state = self.FETCH_STATE_WAIT
+        self.change_state(self.FETCH_STATE_WAIT)
         self.set_timer()
+
+    def is_new_mail(self):
+        for watch in self.watch_maildirs:
+            if watch.last_count > 0:
+                return True
 
     def check_for_new_mail(self):
         for watch in self.watch_maildirs:
@@ -119,6 +139,10 @@ class MbsyncTray(object):
                 self.notify(msg)
                 watch.last_count = new_count
 
+    def change_state(self, which):
+        self.fetch_state = which
+        self.set_icon()
+
     def fetch_mail(self):
         """Shell out to a command to fetch email into a maildir"""
         logging.info("Calling: %s" % " ".join(self.fetch_cmd))
@@ -132,7 +156,7 @@ class MbsyncTray(object):
             self.set_timer()  # try again
             return False
 
-        self.fetch_state = self.FETCH_STATE_FETCHING
+        self.change_state(self.FETCH_STATE_FETCHING)
         GObject.child_watch_add(pid, self.fetch_done_callback, None)
         logging.debug("fetch process pid: %d" % pid)
 
@@ -146,11 +170,14 @@ class MbsyncTray(object):
             logging.warn("notify send not found, cannot notify")
 
     def toggle_enabled(self, x):
-        self.enabled = not self.enabled
-        on_off = "ON" if self.enabled else "OFF"
+        if self.fetch_state == self.FETCH_STATE_DISABLED:
+            on_off = "ON"
+            self.fetch_mail()  # wil set new state
+        else:
+            on_off = "OFF"
+            self.change_state(self.FETCH_STATE_DISABLED)
+
         logging.info("user toggled fetching, now %s" % on_off)
-        if self.enabled:
-            self.set_timer()
 
     def show_menu(self, icon, button, time):
         logging.debug("user enabled menu")
@@ -169,7 +196,10 @@ class MbsyncTray(object):
             self.menu.append(md_item)
 
         # Enable/Disable
-        option = "Disable" if self.enabled else "Enable"
+        if self.fetch_state == self.FETCH_STATE_DISABLED:
+            option = "Enable"
+        else:
+            option = "Disable"
         en_item = Gtk.MenuItem(option)
         en_item.connect('activate', self.toggle_enabled)
         en_item.show()
