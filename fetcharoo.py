@@ -22,6 +22,7 @@ import logging
 import mailbox
 import json
 import os
+import sys
 
 logging.root.setLevel(logging.DEBUG)
 
@@ -29,10 +30,20 @@ NOTIFY_SEND = distutils.spawn.find_executable("notify-send")
 DEFAULT_CONFIG_PATH = os.path.join(os.environ["HOME"], ".fetcharoo.json")
 
 
+def fatal(msg):
+    logging.fatal(msg)
+    sys.exit(1)
+
+
+def sanitise_config_type(d, typ, name):
+    if not isinstance(d, typ):
+        fatal("%s in config should be a %s" % (name, typ))
+
+
 class WatchedMaildir(object):
     def __init__(self, name, path):
         self.name = name
-        self.path = str(path)
+        self.path = path
         self.new_msg_ids = frozenset([])
 
 
@@ -50,12 +61,36 @@ class MbsyncTray(object):
         self.tray.connect('popup-menu', self.show_menu)
         self.tray.set_visible(True)
 
-        self.fetch_interval = config["fetch_interval"]
-        self.fetch_cmd = [str(x) for x in config["fetch_command"]]
+        # Sanitise config file input
+        try:
+            self.fetch_interval = config["fetch_interval"]
+        except KeyError:
+            fatal("config is missing a 'fetch_interval'")
+        sanitise_config_type(self.fetch_interval, int, "fetch_interval")
+
+        try:
+            self.fetch_cmd = config["fetch_command"]
+        except KeyError:
+            fatal("config is missing a 'fetch_command'")
+        sanitise_config_type(self.fetch_cmd, list, "fetch_command")
+        self.fetch_cmd = [str(x) for x in self.fetch_cmd]
+
+        try:
+            md_config = config["maildirs"]
+        except KeyError:
+            md_config = {}  # ok to have no maildirs
+        sanitise_config_type(md_config, dict, "maildirs")
 
         self.watch_maildirs = []
-        for name, info in config["maildirs"].iteritems():
-            self.watch_maildirs.append(WatchedMaildir(name, info["path"]))
+        for name, info in md_config.iteritems():
+            try:
+                md_path = info["path"]
+            except KeyError:
+                fatal("maildir '%s' in config file is missing a 'path'" % name)
+            md_path = str(md_path)
+            sanitise_config_type(md_path, str,
+                                 "path for maildir '%s'" % name)
+            self.watch_maildirs.append(WatchedMaildir(name, md_path))
 
         self.change_state(self.FETCH_STATE_WAIT)
 
