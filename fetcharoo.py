@@ -163,22 +163,11 @@ class MbsyncTray(object):
             logging.info("checking maildir '%s' (%s) for new mail"
                          % (watch.name, watch.path))
 
-            try:
-                md = mailbox.Maildir(watch.path, create=False,
-                                     factory=mailbox.MaildirMessage)
-            except mailbox.NoSuchMailboxError:
-                err_s = "No such mailbox: %s" % watch.path
-                logging.error(err_s)
-                self.notify(err_s)
-                continue
-
-            new_msgs = []
-            for k in md.iterkeys():
-                msg = md.get_message(k)
-                flags = msg.get_flags()
-                if 'S' not in flags:
-                    new_msgs.append(k)
-            md.close()
+            # Sadly it's way to slow to use the mailbox module in the
+            # standard library, so we fall back on filesystem ops.
+            new_subdir = os.path.join(watch.path, "new")
+            new_msgs = [x for x in os.listdir(new_subdir)
+                        if not os.path.isdir(os.path.join(new_subdir, x))]
 
             new_msgs = frozenset(new_msgs)
             old_msgs = watch.new_msg_ids
