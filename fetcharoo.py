@@ -171,14 +171,14 @@ class MbsyncTray(object):
 
             new_msgs = frozenset(new_msgs)
             old_msgs = watch.new_msg_ids
-            actually_new = old_msgs.symmetric_difference(new_msgs)
+            actually_new = new_msgs - old_msgs
 
             if actually_new:
                 msg = "%d new messages in maildir %s" % \
                     (len(actually_new), watch.name)
                 logging.info(msg)
                 self.notify(msg)
-                watch.new_msg_ids = actually_new
+            watch.new_msg_ids = actually_new
 
     def change_state(self, which):
         self.fetch_state = which
