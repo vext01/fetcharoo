@@ -20,10 +20,13 @@ import subprocess
 import distutils.spawn
 import logging
 import mailbox
+import json
+import os
 
 logging.root.setLevel(logging.DEBUG)
 
 NOTIFY_SEND = distutils.spawn.find_executable("notify-send")
+DEFAULT_CONFIG_PATH = os.path.join(os.environ["HOME"], ".fetcharoo.json")
 
 
 class WatchedMaildir(object):
@@ -40,24 +43,20 @@ class MbsyncTray(object):
     FETCH_STATE_FETCHING = 1
     FETCH_STATE_DISABLED = 2
 
-    def __init__(self, fetch_interval=300):
+    def __init__(self, config):
         # Tray Icon itself
+
         self.tray = Gtk.StatusIcon()
         self.tray.connect('popup-menu', self.show_menu)
         self.tray.set_visible(True)
 
-        self.fetch_interval = fetch_interval
+        self.fetch_interval = config["fetch_interval"]
+        self.fetch_cmd = [str(x) for x in config["fetch_command"]]
 
-        # We build a set of new message IDs and use this to decide
-        # if there are any new messages since last time.
-        # XXX real command
-        self.fetch_cmd = ["/bin/sleep", "2"]
+        self.watch_maildirs = []
+        for name, info in config["maildirs"].iteritems():
+            self.watch_maildirs.append(WatchedMaildir(name, info["path"]))
 
-        # XXX make configurable
-        self.watch_maildirs = [
-            WatchedMaildir("Test:test", "test"),
-            WatchedMaildir("Test:yay", "yay"),
-        ]
         self.change_state(self.FETCH_STATE_WAIT)
 
         self.fetch_mail()  # fetch straight away
@@ -220,7 +219,14 @@ class MbsyncTray(object):
         self.menu.popup(None, None, None, None, button, time)
 
 
+def read_config(path):
+    logging.info("reading config file from '%s'" % path)
+    with open(path, "r") as fh:
+        config = json.load(fh)
+    return config
+
 if __name__ == "__main__":
     logging.info("starting up")
-    MbsyncTray(fetch_interval=5)
+    config = read_config(DEFAULT_CONFIG_PATH)
+    MbsyncTray(config)
     Gtk.main()
