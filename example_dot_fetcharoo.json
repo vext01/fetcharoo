@@ -1,0 +1,17 @@
+{
+    "fetch_interval": 300,
+    "fetch_command": ["/usr/local/bin/mbsync", "-a"],
+
+    "maildirs": {
+        "maildir1": {
+            "path": "/path/to/a/maildir",
+	    "click_command": ["/usr/local/bin/xfce4-terminal", "-e",
+		    "mutt -f /path/to/a/maildir"]
+        },
+        "maildir2": {
+            "path": "/path/to/another/maildir",
+	    "click_command": ["/usr/local/bin/xfce4-terminal", "-e",
+		    "mutt -f /path/to/another/maildir"]
+        }
+    }
+}
