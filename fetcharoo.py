@@ -41,9 +41,10 @@ def sanitise_config_type(d, typ, name):
 
 
 class WatchedMaildir(object):
-    def __init__(self, name, path):
+    def __init__(self, name, path, click_command):
         self.name = name
         self.path = path
+        self.click_command = click_command
         self.new_msg_ids = frozenset([])
 
 
@@ -90,7 +91,18 @@ class MbsyncTray(object):
             md_path = str(md_path)
             sanitise_config_type(md_path, str,
                                  "path for maildir '%s'" % name)
-            self.watch_maildirs.append(WatchedMaildir(name, md_path))
+            try:
+                md_click_cmd = info["click_command"]
+            except KeyError:
+                md_click_cmd = None  # OK to have no command
+
+            if md_click_cmd is not None:
+                sanitise_config_type(md_click_cmd, list,
+                                     "click_command for maildir '%s'" % name)
+                md_click_cmd = [str(x) for x in md_click_cmd]
+
+            self.watch_maildirs.append(WatchedMaildir(
+                name, md_path, md_click_cmd))
 
         self.change_state(self.FETCH_STATE_WAIT)
 
@@ -219,6 +231,12 @@ class MbsyncTray(object):
 
         logging.info("user toggled fetching, now %s" % on_off)
 
+    def mk_maildir_click_cb(self, cmd):
+        def wrap(nouse):
+            logging.info("spawning mailbox click_command: %s" % cmd)
+            pid, _in, out, err = GObject.spawn_async(cmd)
+        return wrap
+
     def show_menu(self, icon, button, time):
         logging.debug("user enabled menu")
         self.menu = Gtk.Menu()
@@ -231,7 +249,8 @@ class MbsyncTray(object):
             # XXX needs to be a monospace font
             label = "%s: %05d" % (pad_md_name, len(md.new_msg_ids))
             md_item = Gtk.MenuItem(label)
-            #md_item.connect('activate', xxx)
+            md_item.connect('activate',
+                            self.mk_maildir_click_cb(md.click_command))
             md_item.show()
             self.menu.append(md_item)
 
