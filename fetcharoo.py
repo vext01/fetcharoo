@@ -276,7 +276,10 @@ class MbsyncTray(object):
 def read_config(path):
     logging.info("reading config file from '%s'" % path)
     with open(path, "r") as fh:
-        config = json.load(fh)
+        try:
+            config = json.load(fh)
+        except Exception as e:
+            fatal("problem with config file: %s" % str(e))
     return config
 
 if __name__ == "__main__":
