@@ -32,7 +32,7 @@ DEFAULT_CONFIG_PATH = os.path.join(os.environ["HOME"], ".fetcharoo.json")
 class WatchedMaildir(object):
     def __init__(self, name, path):
         self.name = name
-        self.path = path
+        self.path = str(path)
         self.new_msg_ids = frozenset([])
 
 
