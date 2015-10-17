@@ -178,7 +178,7 @@ class MbsyncTray(object):
                     (len(actually_new), watch.name)
                 logging.info(msg)
                 self.notify(msg)
-            watch.new_msg_ids = actually_new
+            watch.new_msg_ids = new_msgs
 
     def change_state(self, which):
         self.fetch_state = which
