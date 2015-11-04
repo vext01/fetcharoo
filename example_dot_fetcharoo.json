@@ -1,5 +1,6 @@
 {
     "fetch_interval": 300,
+    "fetch_timeout": 45,
     "fetch_command": ["/usr/local/bin/mbsync", "-a"],
 
     "maildirs": {

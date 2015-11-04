@@ -23,6 +23,7 @@ import mailbox
 import json
 import os
 import sys
+import signal
 
 logging.root.setLevel(logging.DEBUG)
 
@@ -68,6 +69,12 @@ class MbsyncTray(object):
         except KeyError:
             fatal("config is missing a 'fetch_interval'")
         sanitise_config_type(self.fetch_interval, int, "fetch_interval")
+
+        try:
+            self.fetch_timeout = config["fetch_timeout"]
+        except KeyError:
+            fatal("config is missing a 'fetch_timeout'")
+        sanitise_config_type(self.fetch_timeout, int, "fetch_timeout")
 
         try:
             self.fetch_cmd = config["fetch_command"]
@@ -123,9 +130,13 @@ class MbsyncTray(object):
 
         self.tray.set_from_icon_name(icon_name)
 
-    def set_timer(self):
-        logging.debug("setting timer for %d seconds" % self.fetch_interval)
-        GObject.timeout_add_seconds(self.fetch_interval, self.timer_callback)
+    def set_timer(self, timeout):
+        logging.debug("setting timer for %d seconds" % timeout)
+        GObject.timeout_add_seconds(timeout, self.timer_callback)
+
+    def kill_fetch_subprocess(self):
+        os.kill(self.fetch_subprocess_pid, signal.SIGKILL)
+        self.fetch_subprocess_pid = None  # used to indicate it was killed
 
     def timer_callback(self):
         """Called by gobject timeout periodically to check for mail"""
@@ -135,23 +146,32 @@ class MbsyncTray(object):
             self.fetch_mail()
         elif self.fetch_state == self.FETCH_STATE_DISABLED:
             pass
+        elif self.fetch_state == self.FETCH_STATE_FETCHING:
+            # this is taking too long
+            err_s = "'%s' timed out!" % " ".join(self.fetch_cmd)
+            logging.error(err_s)
+            self.notify(err_s)
+            self.kill_fetch_subprocess()
         else:
             assert False  # NOREACH
 
         return False
 
     def fetch_done_callback(self, pid, rv, data):
-        if rv != 0:
-            err_s = "'%s' failed! exit=%d" % (" ".join(self.fetch_cmd), rv)
-            logging.error(err_s)
-            self.notify(err_s)
-        else:
-            logging.debug("fetch process done, exit=%d" % rv)
+        if self.fetch_subprocess_pid is not None:
+            # process was NOT killed due to timeout
+            if rv != 0:
+                err_s = "'%s' failed! exit=%d" % \
+                    (" ".join(self.fetch_cmd), rv)
+                logging.error(err_s)
+                self.notify(err_s)
+            else:
+                logging.debug("fetch process done, exit=%d" % rv)
 
         self.check_for_new_mail()
 
         self.change_state(self.FETCH_STATE_WAIT)
-        self.set_timer()
+        self.set_timer(self.fetch_interval)
 
     def is_new_mail(self):
         for watch in self.watch_maildirs:
@@ -194,11 +214,14 @@ class MbsyncTray(object):
             err_s = "spawn failed: %s" % e
             logging.error(err_s)
             self.notify(err_s)
-            self.set_timer()  # try again
+            self.set_timer(self.fetch_interval)  # try again in a while
             return False
 
+        self.fetch_subprocess_pid = pid
         self.change_state(self.FETCH_STATE_FETCHING)
         GObject.child_watch_add(pid, self.fetch_done_callback, None)
+        self.set_timer(self.fetch_timeout)  # ensure it doesn't take forever
+
         logging.debug("fetch process pid: %d" % pid)
 
         return False
