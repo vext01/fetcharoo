@@ -111,6 +111,7 @@ class MbsyncTray(object):
                 name, md_path, md_click_cmd))
 
         self.change_state(self.FETCH_STATE_WAIT)
+        self.timer_id = None
 
         self.fetch_mail()  # fetch straight away
 
@@ -131,7 +132,8 @@ class MbsyncTray(object):
 
     def set_timer(self, timeout):
         logging.debug("setting timer for %d seconds" % timeout)
-        GObject.timeout_add_seconds(timeout, self.timer_callback)
+        self.timer_id = GObject.timeout_add_seconds(
+            timeout, self.timer_callback)
 
     def kill_fetch_subprocess(self):
         os.kill(self.fetch_subprocess_pid, signal.SIGKILL)
@@ -139,6 +141,8 @@ class MbsyncTray(object):
 
     def timer_callback(self):
         """Called by gobject timeout periodically to check for mail"""
+
+        self.timer_id = None
 
         logging.debug("timer callback running")
         if self.fetch_state == self.FETCH_STATE_WAIT:
@@ -157,6 +161,7 @@ class MbsyncTray(object):
         return False
 
     def fetch_done_callback(self, pid, rv, data):
+        self.cancel_timer()
         if self.fetch_subprocess_pid is not None:
             # process was NOT killed due to timeout
             if rv != 0:
@@ -169,8 +174,11 @@ class MbsyncTray(object):
 
         self.check_for_new_mail()
 
-        self.change_state(self.FETCH_STATE_WAIT)
-        self.set_timer(self.fetch_interval)
+        if self.fetch_state != self.FETCH_STATE_DISABLED:
+            self.change_state(self.FETCH_STATE_WAIT)
+            self.set_timer(self.fetch_interval)
+        else:
+            logging.debug("don't reschedule timer, user disabled mid-fetch")
 
     def is_new_mail(self):
         for watch in self.watch_maildirs:
@@ -232,12 +240,23 @@ class MbsyncTray(object):
         else:
             logging.warn("notify send not found, cannot notify")
 
+    def cancel_timer(self):
+        logging.debug("cancel timer")
+        if self.timer_id is not None:
+            GObject.source_remove(self.timer_id)
+            self.timer_id = None
+
     def toggle_enabled(self, x):
         if self.fetch_state == self.FETCH_STATE_DISABLED:
             on_off = "ON"
             self.fetch_mail()  # wil set new state
         else:
             on_off = "OFF"
+
+            # We still want the timer to fire if we are mid-fetch
+            if self.fetch_state != self.FETCH_STATE_FETCHING:
+                self.cancel_timer()
+
             self.change_state(self.FETCH_STATE_DISABLED)
 
         logging.info("user toggled fetching, now %s" % on_off)
