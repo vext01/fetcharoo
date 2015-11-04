@@ -19,7 +19,6 @@ from gi.repository import GLib
 import subprocess
 import distutils.spawn
 import logging
-import mailbox
 import json
 import os
 import sys
